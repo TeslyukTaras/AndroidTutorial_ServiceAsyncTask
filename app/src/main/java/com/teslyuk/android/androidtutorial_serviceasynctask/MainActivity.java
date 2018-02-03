@@ -1,17 +1,23 @@
 package com.teslyuk.android.androidtutorial_serviceasynctask;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -27,6 +33,8 @@ import java.util.Calendar;
 public class MainActivity extends Activity implements View.OnClickListener {
 
     private static final String TAG = MainActivity.class.getSimpleName();
+
+    public static final int MY_PERMISSIONS_REQUEST_LOCATION = 123;
 
     private Button mStartButton;
     private Button mStopButton;
@@ -50,9 +58,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
         initView();
         initListener();
-        initService();
-
         handler = new Handler();
+        checkLocationPermission();
     }
 
     private void initView() {
@@ -72,28 +79,10 @@ public class MainActivity extends Activity implements View.OnClickListener {
         mUnbindButton.setOnClickListener(this);
     }
 
-    private void initService() {
-        serviceConnection = new ServiceConnection() {
-            public void onServiceConnected(ComponentName name, IBinder binder) {
-                Log.d(TAG, "onServiceConnected");
-                LocationService.MyBinder myBinder = (LocationService.MyBinder) binder;
-                mMonitorService = myBinder.getService();
-                isBound = true;
-            }
-
-            public void onServiceDisconnected(ComponentName name) {
-                Log.d(TAG, "onServiceDisconnected");
-                isBound = false;
-            }
-        };
-    }
-
     @Override
     protected void onStart() {
         super.onStart();
-        intent = new Intent(MainActivity.this, LocationService.class);
-        startService(intent);
-        bindMonitorService();
+        initLocationService();
     }
 
     @Override
@@ -113,29 +102,6 @@ public class MainActivity extends Activity implements View.OnClickListener {
     protected void onStop() {
         super.onStop();
         unbindMonitorService();
-    }
-
-    private void startAutoStartService() {
-        SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
-
-        AutoStartService.ServiceEnable = sharedPrefs.getBoolean("perform_updates", true);
-        AutoStartService.ServicePeriod = Integer.parseInt(sharedPrefs.getString("updates_interval", "300000"));
-
-        if (AutoStartService.ServiceEnable) {
-            Calendar cal = Calendar.getInstance();
-            cal.add(Calendar.SECOND, 10);
-
-            Intent startServiceIntent = new Intent(this, AutoStartService.class);
-
-            PendingIntent pintent = PendingIntent.getService(this, 0, startServiceIntent, 0);
-
-            AlarmManager alarm = (AlarmManager) this.getSystemService(Context.ALARM_SERVICE);
-
-            alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
-                    AutoStartService.ServicePeriod, pintent);
-
-            startService(new Intent(this, AutoStartService.class));
-        }
     }
 
     @Override
@@ -161,6 +127,63 @@ public class MainActivity extends Activity implements View.OnClickListener {
         Log.d(TAG, way.getPoints().size() + "");
         for (Point point : way.getPoints()) {
             Log.d(TAG, point.toString());
+        }
+    }
+
+    private void lockServiceControls() {
+        mStartButton.setEnabled(false);
+        mStopButton.setEnabled(false);
+        mBindButton.setEnabled(false);
+        mUnbindButton.setEnabled(false);
+    }
+
+    //Service
+    private void initLocationService() {
+        //don't run location service if there is no right permission
+        if (hasLocationPermissions()) {
+            initServiceConnection();
+            intent = new Intent(MainActivity.this, LocationService.class);
+            startService(intent);
+            bindMonitorService();
+        }
+    }
+
+    private void initServiceConnection() {
+        serviceConnection = new ServiceConnection() {
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                Log.d(TAG, "onServiceConnected");
+                LocationService.MyBinder myBinder = (LocationService.MyBinder) binder;
+                mMonitorService = myBinder.getService();
+                isBound = true;
+            }
+
+            public void onServiceDisconnected(ComponentName name) {
+                Log.d(TAG, "onServiceDisconnected");
+                isBound = false;
+            }
+        };
+    }
+
+    private void startAutoStartService() {
+        SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+        AutoStartService.ServiceEnable = sharedPrefs.getBoolean("perform_updates", true);
+        AutoStartService.ServicePeriod = Integer.parseInt(sharedPrefs.getString("updates_interval", "300000"));
+
+        if (AutoStartService.ServiceEnable) {
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.SECOND, 10);
+
+            Intent startServiceIntent = new Intent(this, AutoStartService.class);
+
+            PendingIntent pintent = PendingIntent.getService(this, 0, startServiceIntent, 0);
+
+            AlarmManager alarm = (AlarmManager) this.getSystemService(Context.ALARM_SERVICE);
+
+            alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
+                    AutoStartService.ServicePeriod, pintent);
+
+            startService(new Intent(this, AutoStartService.class));
         }
     }
 
@@ -202,5 +225,69 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
     void stopDistanceChecker() {
         handler.removeCallbacks(mDistanceChecker);
+    }
+
+    //Location permissions
+
+    public boolean hasLocationPermissions() {
+        return ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public boolean checkLocationPermission() {
+        if (!hasLocationPermissions()) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION)) {
+                showRequestPermissionDialog();
+            } else {
+                // No explanation needed, we can request the permission.
+                Log.d(TAG, "requestPermissions ACCESS_FINE_LOCATION");
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                        MY_PERMISSIONS_REQUEST_LOCATION);
+            }
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    private void showRequestPermissionDialog() {
+        Log.d(TAG, "showRequestPermissionDialog");
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.title_location_permission)
+                .setMessage(R.string.text_location_permission)
+                .setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        //Prompt the user once explanation has been shown
+                        ActivityCompat.requestPermissions(MainActivity.this,
+                                new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                                MY_PERMISSIONS_REQUEST_LOCATION);
+                    }
+                })
+                .create()
+                .show();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_LOCATION: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "PERMISSION_GRANTED");
+                    initLocationService();
+                } else {
+                    Log.d(TAG, "! PERMISSION_GRANTED");
+                    lockServiceControls();
+                }
+                return;
+            }
+
+        }
     }
 }
