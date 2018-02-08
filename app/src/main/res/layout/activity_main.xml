@@ -40,6 +40,12 @@
             android:text="Unbind service">
         </Button>
 
+        <Button
+            android:id="@+id/activity_main_start_bubble_service_btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start Bubble Service"/>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
