@@ -11,10 +11,13 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
@@ -26,6 +29,7 @@ import android.widget.TextView;
 import com.teslyuk.android.androidtutorial_serviceasynctask.model.Point;
 import com.teslyuk.android.androidtutorial_serviceasynctask.model.Way;
 import com.teslyuk.android.androidtutorial_serviceasynctask.service.AutoStartService;
+import com.teslyuk.android.androidtutorial_serviceasynctask.service.BubbleService;
 import com.teslyuk.android.androidtutorial_serviceasynctask.service.LocationService;
 
 import java.util.Calendar;
@@ -40,6 +44,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private Button mStopButton;
     private Button mBindButton;
     private Button mUnbindButton;
+    private Button mStartBubbleServiceBtn;
 
     private TextView mTotalDistanceText;
     private TextView mDirectDistanceText;
@@ -70,6 +75,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
         mTotalDistanceText = findViewById(R.id.tv_total_distance);
         mDirectDistanceText = findViewById(R.id.tv_direct_distance);
+        mStartBubbleServiceBtn = findViewById(R.id.activity_main_start_bubble_service_btn);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            mStartBubbleServiceBtn.setVisibility(View.GONE);
+        }
     }
 
     private void initListener() {
@@ -77,6 +87,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         mStopButton.setOnClickListener(this);
         mBindButton.setOnClickListener(this);
         mUnbindButton.setOnClickListener(this);
+        mStartBubbleServiceBtn.setOnClickListener(this);
     }
 
     @Override
@@ -118,6 +129,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 break;
             case (R.id.btn_unbind):
                 unbindMonitorService();
+                break;
+            case R.id.activity_main_start_bubble_service_btn:
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    if (!Settings.canDrawOverlays(this)) {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+                        startActivityForResult(intent, 0);
+                    } else {
+                        startService(new Intent(MainActivity.this, BubbleService.class));
+                    }
+                }
                 break;
             default:
                 return;
